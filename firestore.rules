@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+
+    // Churches collection
+    match /churches/{churchId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        isAdmin() || 
+        exists(/databases/$(database)/documents/churches/$(churchId)/members/$(request.auth.uid))
+      );
+
+      // Members subcollection
+      match /members/{memberId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated() && (
+          isAdmin() || 
+          exists(/databases/$(database)/documents/churches/$(churchId)/members/$(request.auth.uid))
+        );
+      }
+    }
+
+    // Analytics collection
+    match /analytics/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Activity logs collection
+    match /activityLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+  }
+}
